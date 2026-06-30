@@ -381,7 +381,7 @@ function scheduleView(){
 async function syncSchedule(){
   toast("Fetching schedule...");
   try{
-    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/3/eventsseason.php?id=${SPORTSDB_LEAGUE_ID}&s=2025-2026`);
+    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/123/eventsseason.php?id=${SPORTSDB_LEAGUE_ID}&s=2025-2026`);
     if(!res.ok) throw new Error("Bad response");
     const data = await res.json();
     const events = (data && data.events) ? data.events : [];
@@ -406,7 +406,7 @@ async function syncSchedule(){
 async function syncAllFixturesAsMatches(){
   toast("Fetching all remaining fixtures...");
   try{
-    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/3/eventsseason.php?id=${SPORTSDB_LEAGUE_ID}&s=2025-2026`);
+    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/123/eventsseason.php?id=${SPORTSDB_LEAGUE_ID}&s=2025-2026`);
     if(!res.ok) throw new Error("Bad response");
     const data = await res.json();
     const events = (data && data.events) ? data.events : [];
