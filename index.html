@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Office World Cup Betting Ledger</title>
+<style>
+  :root{
+    --pitch:#0F3D2E;
+    --gold:#D4AF37;
+    --cream:#F7F4EA;
+    --ink:#1A1A1A;
+    --muted:#6B6B5F;
+    --line:#E0DCC8;
+    --danger:#B5402D;
+    --win:#2E7D4F;
+    --lose:#B5402D;
+    --void:#9A9484;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Segoe UI',Roboto,Arial,sans-serif;background:var(--cream);color:var(--ink);}
+  header{background:var(--pitch);color:var(--cream);padding:16px 16px;text-align:center;border-bottom:4px solid var(--gold);position:relative;}
+  header h1{margin:0;font-size:19px;letter-spacing:0.5px;}
+  header p{margin:4px 0 0;font-size:12px;color:#C9DAC9;}
+  .lockBtn{position:absolute;right:12px;top:14px;background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.3);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;}
+  .wrap{max-width:740px;margin:0 auto;padding:14px;}
+  .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
+  .tab{flex:1;min-width:80px;padding:10px 4px;text-align:center;background:#fff;border:1px solid var(--line);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted);}
+  .tab.active{background:var(--pitch);color:#fff;border-color:var(--pitch);}
+  .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px;}
+  .match-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;gap:6px;flex-wrap:wrap;}
+  .stage{font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;}
+  .when{font-size:11px;color:var(--muted);}
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  th,td{border:1px solid var(--line);padding:5px 4px;text-align:center;}
+  th{background:#F1EEE2;font-weight:600;font-size:10.5px;}
+  .field-row{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;}
+  .field-row input,.field-row select{flex:1;min-width:80px;border:1px solid var(--line);border-radius:6px;padding:6px 7px;font-size:13px;}
+  button{background:var(--pitch);color:#fff;border:none;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;}
+  button.secondary{background:#fff;color:var(--pitch);border:1px solid var(--pitch);}
+  button.danger{background:var(--danger);}
+  button.small{padding:4px 8px;font-size:11px;}
+  .section-label{font-size:12px;font-weight:700;color:var(--pitch);margin:10px 0 6px;text-transform:uppercase;letter-spacing:0.3px;}
+  .mult-edit{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
+  .mult-edit label{font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:2px;}
+  .mult-edit input{width:55px;padding:4px;border:1px solid var(--line);border-radius:5px;text-align:center;}
+  .mult-readonly{font-size:11px;color:var(--muted);background:#F1EEE2;padding:4px 8px;border-radius:6px;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--pitch);color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:100;}
+  .toast.show{opacity:1;}
+  .pl-pos{color:var(--win);font-weight:700;}
+  .pl-neg{color:var(--lose);font-weight:700;}
+  .pl-zero{color:var(--muted);}
+  .badge{font-size:10px;padding:2px 6px;border-radius:8px;font-weight:600;}
+  .badge.win{background:#E2F0E6;color:var(--win);}
+  .badge.lose{background:#FAE6E2;color:var(--lose);}
+  .badge.void{background:#EFEDE6;color:var(--void);}
+  .small{font-size:11.5px;color:var(--muted);}
+  .checks{display:flex;gap:14px;align-items:center;font-size:13px;margin-bottom:8px;flex-wrap:wrap;}
+  .checks label{display:flex;align-items:center;gap:5px;}
+  hr{border:none;border-top:1px dashed var(--line);margin:10px 0;}
+  .lb-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px;}
+  .lb-row:last-child{border-bottom:none;}
+  .lb-name{font-weight:600;}
+  .pin-screen{text-align:center;margin-top:40px;}
+  .pin-screen input{width:160px;padding:10px;font-size:18px;text-align:center;letter-spacing:4px;margin:12px 0;display:block;margin-left:auto;margin-right:auto;}
+  .fixture-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;gap:8px;}
+  .fixture-row:last-child{border-bottom:none;}
+  .fixture-time{font-size:11px;color:var(--muted);}
+  .house-box{background:var(--pitch);color:#fff;border-radius:10px;padding:14px 16px;margin-bottom:12px;text-align:center;}
+  .house-box .num{font-size:26px;font-weight:700;margin-top:4px;}
+  #printArea{display:none;}
+  @media print{
+    body *{display:none !important;}
+    #printArea, #printArea *{display:revert !important;}
+    #printArea{display:block !important;position:absolute;top:0;left:0;width:100%;padding:20px;}
+    #printArea table{width:100%;border-collapse:collapse;}
+    #printArea th, #printArea td{border:1px solid #000;padding:4px 6px;font-size:12px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Office World Cup Betting Ledger</h1>
+  <p>Handicap-style match betting</p>
+  <button class="lockBtn" id="lockBtn">Admin</button>
+</header>
+
+<div class="wrap" id="app"></div>
+<div class="toast" id="toast"></div>
+<div id="printArea"></div>
+
+<script>
+const DEFAULT_MULT = {fav:0.5, dog:1.5, draw:1, goal:3};
+const DEFAULT_ETMULT = {fav:0.75, dog:2, draw:1, goal:4.5};
+const DEFAULT_PENMULT = {fav:2, dog:2};
+const DEFAULT_PIN = "2026";
+const SPORTSDB_LEAGUE_ID = "4429";
+
+let state = { matches: [], schedule: [], adminUnlocked:false, adminPin: DEFAULT_PIN, tab: "matches" };
+
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"), 1800);
+}
+function esc(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+async function loadAll(){
+  try{ const v = localStorage.getItem("bet_matches"); state.matches = v ? JSON.parse(v) : []; }
+  catch(e){ state.matches = []; }
+  try{ const v = localStorage.getItem("admin_pin"); state.adminPin = v || DEFAULT_PIN; }
+  catch(e){ state.adminPin = DEFAULT_PIN; }
+  document.getElementById("lockBtn").onclick = ()=>{ state.tab = "admin"; render(); };
+  render();
+}
+async function saveMatches(){ localStorage.setItem("bet_matches", JSON.stringify(state.matches)); }
+async function savePin(){ localStorage.setItem("admin_pin", state.adminPin); }
+
+function newMatch(){
+  return {
+    id: "m-"+Date.now(),
+    stage:"", when:"", fav:"", dog:"",
+    mult: {...DEFAULT_MULT}, etMult: {...DEFAULT_ETMULT}, penMult: {...DEFAULT_PENMULT},
+    bets: [],
+    result: { s1:"", s2:"", wentET:false, et_s1:"", et_s2:"", wentPen:false, penWinner:"" }
+  };
+}
+
+function render(){
+  const app = document.getElementById("app");
+  let html = `<div class="tabs">
+    <div class="tab ${state.tab==='matches'?'active':''}" data-tab="matches">Matches & bets</div>
+    <div class="tab ${state.tab==='schedule'?'active':''}" data-tab="schedule">Schedule (NPT)</div>
+    <div class="tab ${state.tab==='ledger'?'active':''}" data-tab="ledger">Ledger</div>
+    <div class="tab ${state.tab==='admin'?'active':''}" data-tab="admin">Admin</div>
+  </div><div id="tabContent"></div>`;
+  app.innerHTML = html;
+  document.querySelectorAll(".tab").forEach(t=> t.onclick = ()=>{ state.tab=t.dataset.tab; render(); });
+  const content = document.getElementById("tabContent");
+  if(state.tab==="matches") content.innerHTML = matchesView();
+  else if(state.tab==="schedule") content.innerHTML = scheduleView();
+  else if(state.tab==="ledger") content.innerHTML = ledgerView();
+  else if(state.tab==="admin") content.innerHTML = adminView();
+  wireEvents();
+}
+
+function matchesView(){
+  if(!state.matches.length) return `<div class="card"><p class="small">No matches yet. Go to the Admin tab (PIN required) to add one, or sync fixtures from the Schedule tab.</p></div>`;
+  return state.matches.map(m=> matchCard(m, false)).join("");
+}
+
+function matchCard(m, adminMode){
+  const result = settleMatch(m);
+  const locked = !adminMode;
+  return `<div class="card" data-mcard="${m.id}">
+    <div class="match-head">
+      ${adminMode ? `<input class="stageInput" data-id="${m.id}" placeholder="Stage" value="${esc(m.stage)}" style="width:110px;">
+      <input class="whenInput" data-id="${m.id}" placeholder="When (NPT)" value="${esc(m.when)}" style="width:130px;">
+      <button class="danger small" data-delmatch="${m.id}">Delete</button>`
+      : `<span class="stage">${esc(m.stage)}</span><span class="when">${esc(m.when)}</span>`}
+    </div>
+    <div style="text-align:center;font-weight:700;font-size:16px;margin-bottom:6px;">
+      ${esc(m.fav)||"Favorite"} <span class="small">vs</span> ${esc(m.dog)||"Underdog"}
+    </div>
+    ${adminMode ? `<div class="field-row">
+      <input class="favInput" data-id="${m.id}" placeholder="Favorite team" value="${esc(m.fav)}">
+      <input class="dogInput" data-id="${m.id}" placeholder="Underdog team" value="${esc(m.dog)}">
+    </div>` : ""}
+
+    <div class="section-label">90 min multipliers</div>
+    ${adminMode ? `<div class="mult-edit">
+      <label>Favorite win<input data-id="${m.id}" data-mult="fav" type="number" step="0.05" value="${m.mult.fav}"></label>
+      <label>Underdog win<input data-id="${m.id}" data-mult="dog" type="number" step="0.05" value="${m.mult.dog}"></label>
+      <label>Draw<input data-id="${m.id}" data-mult="draw" type="number" step="0.05" value="${m.mult.draw}"></label>
+      <label>Exact score<input data-id="${m.id}" data-mult="goal" type="number" step="0.5" value="${m.mult.goal}"></label>
+    </div>` : `<p class="mult-readonly">Fav win ${m.mult.fav}x &middot; Dog win ${m.mult.dog}x &middot; Draw ${m.mult.draw}x &middot; Exact score ${m.mult.goal}x</p>`}
+
+    <div class="section-label">Extra time multipliers</div>
+    ${adminMode ? `<div class="mult-edit">
+      <label>Favorite win<input data-id="${m.id}" data-etmult="fav" type="number" step="0.05" value="${m.etMult.fav}"></label>
+      <label>Underdog win<input data-id="${m.id}" data-etmult="dog" type="number" step="0.05" value="${m.etMult.dog}"></label>
+      <label>Draw<input data-id="${m.id}" data-etmult="draw" type="number" step="0.05" value="${m.etMult.draw}"></label>
+      <label>Exact score<input data-id="${m.id}" data-etmult="goal" type="number" step="0.5" value="${m.etMult.goal}"></label>
+    </div>` : `<p class="mult-readonly">Fav win ${m.etMult.fav}x &middot; Dog win ${m.etMult.dog}x &middot; Draw ${m.etMult.draw}x &middot; Exact score ${m.etMult.goal}x</p>`}
+
+    <div class="section-label">Penalty shootout multipliers</div>
+    ${adminMode ? `<div class="mult-edit">
+      <label>Favorite wins pens<input data-id="${m.id}" data-penmult="fav" type="number" step="0.5" value="${m.penMult.fav}"></label>
+      <label>Underdog wins pens<input data-id="${m.id}" data-penmult="dog" type="number" step="0.5" value="${m.penMult.dog}"></label>
+    </div>` : `<p class="mult-readonly">Fav wins pens ${m.penMult.fav}x &middot; Dog wins pens ${m.penMult.dog}x</p>`}
+
+    <hr>
+    <div class="section-label">Bets ${adminMode?"":"(read-only)"}</div>
+    <table>
+      <tr><th>Name</th><th>Bet type</th><th>Score guess</th><th>Stake</th><th>Status</th><th>P/L</th>${adminMode?"<th></th>":""}</tr>
+      ${m.bets.map((b,i)=> betRow(m,b,i,result,adminMode)).join("")}
+    </table>
+    <p class="small">Stake = amount wagered, typed in by you. Status and P/L are calculated automatically once you save a result below \u2014 you never type those.</p>
+    ${adminMode ? `<div class="card" style="background:#FAF8F1;margin-top:8px;">
+      <p class="small" style="font-weight:600;margin-bottom:6px;">Add bets for one person (tick any combination)</p>
+      <div class="field-row">
+        <input class="newBetName" data-id="${m.id}" placeholder="Name" style="width:140px;">
+      </div>
+      <table>
+        <tr><th></th><th>Bet type</th><th>Stake</th><th>Score guess</th></tr>
+        ${multiBetRow(m.id,"90fav","90min: Favorite win")}
+        ${multiBetRow(m.id,"90dog","90min: Underdog win")}
+        ${multiBetRow(m.id,"90draw","90min: Draw")}
+        ${multiBetRow(m.id,"90goal","90min: Exact score", true)}
+        ${multiBetRow(m.id,"etfav","ET: Favorite win")}
+        ${multiBetRow(m.id,"etdog","ET: Underdog win")}
+        ${multiBetRow(m.id,"etdraw","ET: Draw (goes to pens)")}
+        ${multiBetRow(m.id,"etgoal","ET: Exact score", true)}
+        ${multiBetRow(m.id,"penfav","Penalties: Favorite wins")}
+        ${multiBetRow(m.id,"pendog","Penalties: Underdog wins")}
+      </table>
+      <button data-addbets="${m.id}" style="margin-top:8px;">Add bets</button>
+    </div>` : ""}
+
+    ${adminMode ? `<hr><div class="section-label">Result</div>
+    <div class="field-row">
+      <span class="small" style="align-self:center;">Regulation (90 min):</span>
+      <input class="resS1" data-id="${m.id}" type="number" placeholder="${esc(m.fav)||'Fav'} goals" value="${m.result.s1}" style="width:70px;">
+      <input class="resS2" data-id="${m.id}" type="number" placeholder="${esc(m.dog)||'Dog'} goals" value="${m.result.s2}" style="width:70px;">
+    </div>
+    <div class="checks"><label><input type="checkbox" class="wentET" data-id="${m.id}" ${m.result.wentET?"checked":""}> Match went to extra time</label></div>
+    <div class="field-row">
+      <span class="small" style="align-self:center;">Extra time score (if applicable):</span>
+      <input class="etS1" data-id="${m.id}" type="number" placeholder="${esc(m.fav)||'Fav'} (ET)" value="${m.result.et_s1}" style="width:90px;" ${m.result.wentET?"":"disabled"}>
+      <input class="etS2" data-id="${m.id}" type="number" placeholder="${esc(m.dog)||'Dog'} (ET)" value="${m.result.et_s2}" style="width:90px;" ${m.result.wentET?"":"disabled"}>
+    </div>
+    <div class="checks"><label><input type="checkbox" class="wentPen" data-id="${m.id}" ${m.result.wentPen?"checked":""} ${m.result.wentET?"":"disabled"}> Match went to penalty shootout</label></div>
+    <div class="field-row">
+      <span class="small" style="align-self:center;">Penalty shootout winner:</span>
+      <select class="penWinner" data-id="${m.id}" ${m.result.wentPen?"":"disabled"}>
+        <option value="">--</option>
+        <option value="fav" ${m.result.penWinner==='fav'?'selected':''}>${esc(m.fav)||'Favorite'}</option>
+        <option value="dog" ${m.result.penWinner==='dog'?'selected':''}>${esc(m.dog)||'Underdog'}</option>
+      </select>
+    </div>
+    <button data-savesettle="${m.id}" style="margin-top:6px;">Save result & settle</button>` : ""}
+
+    <div class="field-row" style="margin-top:10px;">
+      <button class="secondary" data-print="${m.id}">Print bet sheet</button>
+    </div>
+  </div>`;
+}
+
+function multiBetRow(matchId, type, label, isGoal){
+  return `<tr>
+    <td><input type="checkbox" class="mbCheck" data-id="${matchId}" data-type="${type}"></td>
+    <td style="text-align:left;">${esc(label)}</td>
+    <td><input type="number" class="mbStake" data-id="${matchId}" data-type="${type}" placeholder="Stake" style="width:60px;"></td>
+    <td>${isGoal ? `<input type="number" class="mbGoalFav" data-id="${matchId}" data-type="${type}" placeholder="Fav" style="width:40px;"><input type="number" class="mbGoalDog" data-id="${matchId}" data-type="${type}" placeholder="Dog" style="width:40px;">` : "-"}</td>
+  </tr>`;
+}
+
+function betLabel(type){
+  return {
+    "90fav":"90min Fav win", "90dog":"90min Dog win", "90draw":"90min Draw", "90goal":"90min Exact score",
+    "etfav":"ET Fav win", "etdog":"ET Dog win", "etdraw":"ET Draw", "etgoal":"ET Exact score",
+    "penfav":"Pens Fav win", "pendog":"Pens Dog win"
+  }[type] || type;
+}
+
+function betRow(m,b,i,settled,adminMode){
+  const st = settled.bets[i] || {status:"pending", pl:0};
+  const badgeClass = st.status==="win"?"win":(st.status==="lose"?"lose":"void");
+  const plClass = st.pl>0?"pl-pos":(st.pl<0?"pl-neg":"pl-zero");
+  const scoreGuess = b.type.includes("goal") ? `${b.gs1}-${b.gs2}` : "-";
+  return `<tr>
+    <td>${esc(b.name)}</td>
+    <td>${betLabel(b.type)}</td>
+    <td>${scoreGuess}</td>
+    <td>${b.stake}</td>
+    <td><span class="badge ${badgeClass}">${st.status}</span></td>
+    <td class="${plClass}">${st.pl>0?'+':''}${st.pl.toFixed(2)}</td>
+    ${adminMode ? `<td><button class="danger small" data-delbet="${m.id}:${i}">x</button></td>` : ""}
+  </tr>`;
+}
+
+function settleMatch(m){
+  const r = m.result;
+  const hasReg = r.s1!=="" && r.s2!=="";
+  const s1 = Number(r.s1), s2 = Number(r.s2);
+  const regOutcome = !hasReg ? null : (s1>s2 ? "fav" : (s2>s1 ? "dog" : "draw"));
+  const etHas = r.wentET && r.et_s1!=="" && r.et_s2!=="";
+  const et1 = etHas ? Number(r.et_s1) : null, et2 = etHas ? Number(r.et_s2) : null;
+  const etOutcome = !etHas ? null : (et1>et2 ? "fav" : (et2>et1 ? "dog" : "draw"));
+  const penOutcome = r.wentPen ? r.penWinner : null;
+
+  const bets = m.bets.map(b=>{
+    let status = "pending", pl = 0;
+    const stake = Number(b.stake)||0;
+    if(b.type==="90fav"){ if(!hasReg) return {status:"pending",pl:0}; status = regOutcome==="fav" ? "win":"lose"; pl = status==="win" ? stake*m.mult.fav : -stake; }
+    else if(b.type==="90dog"){ if(!hasReg) return {status:"pending",pl:0}; status = regOutcome==="dog" ? "win":"lose"; pl = status==="win" ? stake*m.mult.dog : -stake; }
+    else if(b.type==="90draw"){ if(!hasReg) return {status:"pending",pl:0}; status = regOutcome==="draw" ? "win":"lose"; pl = status==="win" ? stake*m.mult.draw : -stake; }
+    else if(b.type==="90goal"){ if(!hasReg) return {status:"pending",pl:0}; const match = Number(b.gs1)===s1 && Number(b.gs2)===s2; status = match?"win":"lose"; pl = match? stake*m.mult.goal : -stake; }
+    else if(b.type==="etfav"){ if(!r.wentET) return {status:"void",pl:0}; if(!etHas) return {status:"pending",pl:0}; status = etOutcome==="fav"?"win":"lose"; pl = status==="win"? stake*m.etMult.fav : -stake; }
+    else if(b.type==="etdog"){ if(!r.wentET) return {status:"void",pl:0}; if(!etHas) return {status:"pending",pl:0}; status = etOutcome==="dog"?"win":"lose"; pl = status==="win"? stake*m.etMult.dog : -stake; }
+    else if(b.type==="etdraw"){ if(!r.wentET) return {status:"void",pl:0}; if(!etHas) return {status:"pending",pl:0}; status = etOutcome==="draw"?"win":"lose"; pl = status==="win"? stake*m.etMult.draw : -stake; }
+    else if(b.type==="etgoal"){ if(!r.wentET) return {status:"void",pl:0}; if(!etHas) return {status:"pending",pl:0}; const match = Number(b.gs1)===et1 && Number(b.gs2)===et2; status = match?"win":"lose"; pl = match? stake*m.etMult.goal : -stake; }
+    else if(b.type==="penfav"){ if(!r.wentPen) return {status:"void",pl:0}; if(!penOutcome) return {status:"pending",pl:0}; status = penOutcome==="fav"?"win":"lose"; pl = status==="win"? stake*m.penMult.fav : -stake; }
+    else if(b.type==="pendog"){ if(!r.wentPen) return {status:"void",pl:0}; if(!penOutcome) return {status:"pending",pl:0}; status = penOutcome==="dog"?"win":"lose"; pl = status==="win"? stake*m.penMult.dog : -stake; }
+    return {status,pl};
+  });
+  return {bets};
+}
+
+function ledgerView(){
+  const totals = {};
+  state.matches.forEach(m=>{
+    const settled = settleMatch(m);
+    m.bets.forEach((b,i)=>{
+      const st = settled.bets[i];
+      if(st.status==="pending") return;
+      totals[b.name] = (totals[b.name]||0) + st.pl;
+    });
+  });
+  const sorted = Object.entries(totals).sort((a,b)=>b[1]-a[1]);
+  if(!sorted.length) return `<div class="card"><p class="small">No settled bets yet.</p></div>`;
+  return `<div class="card">
+    ${sorted.map(([name,pl])=>`<div class="lb-row">
+      <span class="lb-name">${esc(name)}</span>
+      <span class="${pl>0?'pl-pos':(pl<0?'pl-neg':'pl-zero')}">${pl>0?'+':''}${pl.toFixed(2)}</span>
+    </div>`).join("")}
+  </div>
+  <p class="small" style="text-align:center;">Positive = net winnings, negative = net owed. Voided bets don't count.</p>`;
+}
+
+function adminView(){
+  if(!state.adminUnlocked){
+    return `<div class="pin-screen">
+      <p>Enter admin PIN</p>
+      <input type="password" id="pinInput" inputmode="numeric" maxlength="8"/>
+      <button id="pinSubmit">Unlock</button>
+      <p class="small" style="margin-top:14px;">Default PIN unless changed: ${esc(DEFAULT_PIN)}</p>
+    </div>`;
+  }
+
+  const totalHouse = state.matches.reduce((sum,m)=>{
+    const settled = settleMatch(m);
+    const matchPL = settled.bets.reduce((s,b)=> s + (b.status==="pending"||b.status==="void" ? 0 : -b.pl), 0);
+    return sum + matchPL;
+  }, 0);
+
+  return `<div class="house-box">
+    <div class="small" style="opacity:0.85;">House net profit / loss (visible to admin only)</div>
+    <div class="num">${totalHouse>=0?'+':''}${totalHouse.toFixed(2)}</div>
+  </div>
+
+  <div class="card">
+    <button id="addMatchBtn">+ Add match</button>
+    <button class="secondary" id="syncAllBtn" style="margin-left:8px;">Auto-add all remaining matches</button>
+    <button class="secondary" id="changePinBtn" style="margin-left:8px;">Change PIN</button>
+    <button class="secondary" id="lockOutBtn" style="margin-left:8px;">Lock admin</button>
+    <p class="small" style="margin-top:8px;">Auto-add pulls every upcoming fixture from the schedule API and creates a match card for each (favorite is set to the first-listed team by default \u2014 swap it per match if needed). To record a bet, open a match card below and use the Name field under "Bets" \u2014 type the better's name there each time you add their stake.</p>
+  </div>
+  ${state.matches.map(m=> matchCard(m, true)).join("")}`;
+}
+
+function scheduleView(){
+  return `<div class="card">
+    <button id="syncScheduleBtn">Sync fixtures (Nepal time)</button>
+    <p class="small" style="margin-top:8px;">Pulls upcoming World Cup fixtures from a public schedule API and converts kickoff time to Asia/Kathmandu (NPT). If the API is unreachable from your network, add matches manually in the Admin tab instead.</p>
+  </div>
+  <div class="card" id="fixtureList">
+    ${state.schedule.length ? state.schedule.map(f=>`
+      <div class="fixture-row">
+        <div>
+          <div>${esc(f.team1)} vs ${esc(f.team2)}</div>
+          <div class="fixture-time">${esc(f.whenNPT)}</div>
+        </div>
+        ${state.adminUnlocked ? `<button class="small" data-usefixture="${f.team1}|||${f.team2}|||${f.whenNPT}">Use</button>` : ""}
+      </div>
+    `).join("") : `<p class="small">No fixtures synced yet.</p>`}
+  </div>`;
+}
+
+async function syncSchedule(){
+  toast("Fetching schedule...");
+  try{
+    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/3/eventsseason.php?id=${SPORTSDB_LEAGUE_ID}&s=2026`);
+    if(!res.ok) throw new Error("Bad response");
+    const data = await res.json();
+    const events = (data && data.events) ? data.events : [];
+    const now = new Date();
+    const upcoming = events.filter(e=>{
+      if(!e.strTimestamp) return false;
+      const t = new Date(e.strTimestamp);
+      return t >= now;
+    }).slice(0,30);
+    state.schedule = upcoming.map(e=>{
+      const t = new Date(e.strTimestamp);
+      const whenNPT = t.toLocaleString("en-US", {timeZone:"Asia/Kathmandu", weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) + " NPT";
+      return { team1: e.strHomeTeam, team2: e.strAwayTeam, whenNPT };
+    });
+    toast(state.schedule.length ? "Schedule synced" : "No upcoming fixtures found");
+  }catch(err){
+    toast("Could not reach schedule API \u2014 add matches manually instead");
+  }
+  render();
+}
+
+async function syncAllFixturesAsMatches(){
+  toast("Fetching all remaining fixtures...");
+  try{
+    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/3/eventsseason.php?id=${SPORTSDB_LEAGUE_ID}&s=2026`);
+    if(!res.ok) throw new Error("Bad response");
+    const data = await res.json();
+    const events = (data && data.events) ? data.events : [];
+    const now = new Date();
+    const upcoming = events.filter(e=> e.strTimestamp && new Date(e.strTimestamp) >= now);
+    const existingPairs = new Set(state.matches.map(m=> m.fav+"|"+m.dog));
+    let added = 0;
+    upcoming.forEach(e=>{
+      const t = new Date(e.strTimestamp);
+      const whenNPT = t.toLocaleString("en-US", {timeZone:"Asia/Kathmandu", weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) + " NPT";
+      const pairKey = e.strHomeTeam+"|"+e.strAwayTeam;
+      if(existingPairs.has(pairKey)) return;
+      const m = newMatch();
+      m.fav = e.strHomeTeam; m.dog = e.strAwayTeam; m.when = whenNPT;
+      m.stage = e.strRound ? ("Round "+e.strRound) : "Knockout stage";
+      state.matches.push(m);
+      existingPairs.add(pairKey);
+      added++;
+    });
+    await saveMatches();
+    toast(added ? `Added ${added} matches` : "No new fixtures to add \u2014 try again later or add manually");
+  }catch(err){
+    toast("Could not reach schedule API \u2014 add matches manually instead");
+  }
+  render();
+}
+
+function buildPrintTable(m){
+  const cats = [
+    {key:"90fav", label:`90min ${m.fav||"Fav"}`}, {key:"90dog", label:`90min ${m.dog||"Dog"}`}, {key:"90draw", label:"90min Draw"}, {key:"90goal", label:"90min Exact score"},
+    {key:"etfav", label:`ET ${m.fav||"Fav"}`}, {key:"etdog", label:`ET ${m.dog||"Dog"}`}, {key:"etdraw", label:"ET Draw"}, {key:"etgoal", label:"ET Exact score"},
+    {key:"penfav", label:`Pens ${m.fav||"Fav"}`}, {key:"pendog", label:`Pens ${m.dog||"Dog"}`}
+  ];
+  const names = [...new Set(m.bets.map(b=>b.name))];
+  let rows = names.map((name,i)=>{
+    const cells = cats.map(c=>{
+      const match = m.bets.filter(b=>b.name===name && b.type===c.key);
+      if(!match.length) return "<td></td>";
+      const total = match.reduce((s,b)=>s+Number(b.stake||0),0);
+      const scores = match.filter(b=>b.gs1!=="").map(b=>`${b.gs1}-${b.gs2}`).join(",");
+      return `<td>${total}${scores?` (${esc(scores)})`:""}</td>`;
+    }).join("");
+    return `<tr><td>${i+1}</td><td>${esc(name)}</td>${cells}</tr>`;
+  }).join("");
+  return `<h2 style="text-align:center;">${esc(m.fav)} vs ${esc(m.dog)}</h2>
+  <p style="text-align:center;font-size:13px;">${esc(m.stage)} &middot; ${esc(m.when)}</p>
+  <table>
+    <tr><th>S.No.</th><th>Name</th>${cats.map(c=>`<th>${esc(c.label)}</th>`).join("")}</tr>
+    ${rows}
+  </table>`;
+}
+
+function wireEvents(){
+  const lockBtn = document.getElementById("lockBtn");
+  if(lockBtn) lockBtn.onclick = ()=>{ state.tab = "admin"; render(); };
+
+  const pinSubmit = document.getElementById("pinSubmit");
+  if(pinSubmit) pinSubmit.onclick = ()=>{
+    const val = document.getElementById("pinInput").value;
+    if(val === state.adminPin){ state.adminUnlocked = true; render(); toast("Admin unlocked"); }
+    else toast("Wrong PIN");
+  };
+
+  const changePin = document.getElementById("changePinBtn");
+  if(changePin) changePin.onclick = async ()=>{
+    const np = prompt("Enter new admin PIN:");
+    if(np){ state.adminPin = np; await savePin(); toast("PIN updated"); }
+  };
+  const lockOut = document.getElementById("lockOutBtn");
+  if(lockOut) lockOut.onclick = ()=>{ state.adminUnlocked = false; state.tab="matches"; render(); };
+
+  const addM = document.getElementById("addMatchBtn");
+  if(addM) addM.onclick = async ()=>{ state.matches.push(newMatch()); await saveMatches(); render(); };
+
+  document.querySelectorAll("[data-delmatch]").forEach(btn=> btn.onclick = async ()=>{
+    state.matches = state.matches.filter(m=>m.id!==btn.dataset.delmatch);
+    await saveMatches(); render();
+  });
+
+  document.querySelectorAll(".stageInput").forEach(inp=> inp.onchange=async()=>{ getM(inp.dataset.id).stage=inp.value; await saveMatches(); });
+  document.querySelectorAll(".whenInput").forEach(inp=> inp.onchange=async()=>{ getM(inp.dataset.id).when=inp.value; await saveMatches(); });
+  document.querySelectorAll(".favInput").forEach(inp=> inp.onchange=async()=>{ getM(inp.dataset.id).fav=inp.value; await saveMatches(); render(); });
+  document.querySelectorAll(".dogInput").forEach(inp=> inp.onchange=async()=>{ getM(inp.dataset.id).dog=inp.value; await saveMatches(); render(); });
+
+  document.querySelectorAll("[data-mult]").forEach(inp=> inp.onchange=async()=>{ getM(inp.dataset.id).mult[inp.dataset.mult]=Number(inp.value); await saveMatches(); render(); });
+  document.querySelectorAll("[data-etmult]").forEach(inp=> inp.onchange=async()=>{ getM(inp.dataset.id).etMult[inp.dataset.etmult]=Number(inp.value); await saveMatches(); render(); });
+  document.querySelectorAll("[data-penmult]").forEach(inp=> inp.onchange=async()=>{ getM(inp.dataset.id).penMult[inp.dataset.penmult]=Number(inp.value); await saveMatches(); render(); });
+
+  document.querySelectorAll("[data-addbets]").forEach(btn=> btn.onclick = async ()=>{
+    const id = btn.dataset.addbets;
+    const m = getM(id);
+    const name = document.querySelector(`.newBetName[data-id="${id}"]`).value.trim();
+    if(!name){ toast("Enter a name first"); return; }
+    let added = 0;
+    document.querySelectorAll(`.mbCheck[data-id="${id}"]`).forEach(cb=>{
+      if(!cb.checked) return;
+      const type = cb.dataset.type;
+      const stakeEl = document.querySelector(`.mbStake[data-id="${id}"][data-type="${type}"]`);
+      const stake = stakeEl ? stakeEl.value : "";
+      if(!stake){ return; }
+      let gs1 = "", gs2 = "";
+      const gFav = document.querySelector(`.mbGoalFav[data-id="${id}"][data-type="${type}"]`);
+      const gDog = document.querySelector(`.mbGoalDog[data-id="${id}"][data-type="${type}"]`);
+      if(gFav){ gs1 = gFav.value || ""; gs2 = gDog.value || ""; }
+      m.bets.push({name, type, gs1, gs2, stake: Number(stake)});
+      added++;
+    });
+    if(!added){ toast("Tick at least one bet type with a stake"); return; }
+    await saveMatches(); render();
+    toast(`Added ${added} bet(s) for ${name}`);
+  });
+
+  document.querySelectorAll("[data-delbet]").forEach(btn=> btn.onclick = async ()=>{
+    const [id, idx] = btn.dataset.delbet.split(":");
+    const m = getM(id);
+    m.bets.splice(Number(idx),1);
+    await saveMatches(); render();
+  });
+
+  document.querySelectorAll(".wentET").forEach(cb=> cb.onchange=()=>{ getM(cb.dataset.id).result.wentET = cb.checked; render(); });
+  document.querySelectorAll(".wentPen").forEach(cb=> cb.onchange=()=>{ getM(cb.dataset.id).result.wentPen = cb.checked; render(); });
+
+  document.querySelectorAll("[data-savesettle]").forEach(btn=> btn.onclick = async ()=>{
+    const id = btn.dataset.savesettle;
+    const m = getM(id);
+    m.result.s1 = document.querySelector(`.resS1[data-id="${id}"]`).value;
+    m.result.s2 = document.querySelector(`.resS2[data-id="${id}"]`).value;
+    const etS1El = document.querySelector(`.etS1[data-id="${id}"]`);
+    const etS2El = document.querySelector(`.etS2[data-id="${id}"]`);
+    if(etS1El){ m.result.et_s1 = etS1El.value; m.result.et_s2 = etS2El.value; }
+    const penWinEl = document.querySelector(`.penWinner[data-id="${id}"]`);
+    if(penWinEl){ m.result.penWinner = penWinEl.value; }
+    await saveMatches();
+    render();
+    toast("Result saved and bets settled");
+  });
+
+  document.querySelectorAll("[data-print]").forEach(btn=> btn.onclick = ()=>{
+    const m = getM(btn.dataset.print);
+    document.getElementById("printArea").innerHTML = buildPrintTable(m);
+    window.print();
+  });
+
+  const syncBtn = document.getElementById("syncScheduleBtn");
+  if(syncBtn) syncBtn.onclick = syncSchedule;
+
+  const syncAllBtn = document.getElementById("syncAllBtn");
+  if(syncAllBtn) syncAllBtn.onclick = syncAllFixturesAsMatches;
+
+  document.querySelectorAll("[data-usefixture]").forEach(btn=> btn.onclick = async ()=>{
+    const [t1,t2,when] = btn.dataset.usefixture.split("|||");
+    const m = newMatch();
+    m.fav = t1; m.dog = t2; m.when = when; m.stage = "Synced fixture";
+    state.matches.push(m);
+    await saveMatches();
+    state.tab = "admin";
+    render();
+    toast("Match created from fixture");
+  });
+}
+
+function getM(id){ return state.matches.find(m=>m.id===id); }
+
+loadAll();
+</script>
+</body>
+</html>
