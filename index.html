@@ -38,7 +38,8 @@
   .match-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;gap:6px;flex-wrap:wrap;}
   .stage{font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:0.4px;}
   .when{font-size:11px;color:var(--muted);}
-  table{width:100%;border-collapse:collapse;font-size:12px;}
+  table{width:100%;border-collapse:collapse;font-size:12px;min-width:520px;}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:4px;}
   th,td{border:1px solid var(--line);padding:6px 5px;text-align:center;}
   th{background:#F1EEE2;font-weight:700;font-size:10.5px;color:var(--pitch);text-transform:uppercase;letter-spacing:0.2px;}
   tr:nth-child(even) td{background:#FCFBF7;}
@@ -141,6 +142,12 @@ async function saveArchive(){
   localStorage.setItem("archived_house", String(state.archivedHouse));
 }
 
+function tsToLocal(ts){
+  if(typeof ts !== "number") return "";
+  const d = new Date(ts);
+  const pad = n=> String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 function newMatch(){
   return {
     id: "m-"+Date.now(),
@@ -191,10 +198,12 @@ function matchCard(m, adminMode){
   return `<div class="card" data-mcard="${m.id}">
     <div class="match-head">
       ${adminMode ? `<input class="stageInput" data-id="${m.id}" placeholder="Stage" value="${esc(m.stage)}" style="width:110px;">
-      <input class="whenInput" data-id="${m.id}" placeholder="When (NPT)" value="${esc(m.when)}" style="width:130px;">
+      <input class="dtInput" data-id="${m.id}" type="datetime-local" value="${tsToLocal(m.ts)}" title="Set actual kickoff date/time \u2014 controls sort order" style="width:170px;">
+      <input class="whenInput" data-id="${m.id}" placeholder="When (display label)" value="${esc(m.when)}" style="width:130px;">
       <button class="danger small" data-delmatch="${m.id}">Delete</button>`
       : `<span class="stage">${esc(m.stage)}</span><span class="when">${esc(m.when)}</span>`}
     </div>
+    ${adminMode && !m.ts ? `<p class="small" style="color:var(--danger);margin:-4px 0 8px;">No kickoff date set \u2014 this match will sort to the bottom. Pick a date/time above.</p>` : ""}
     <div class="vs-banner">
       <span class="vs-team">${esc(m.fav)||"Favorite"}</span>
       <span class="vs-sep">vs</span>
@@ -231,17 +240,17 @@ function matchCard(m, adminMode){
 
     <hr>
     <div class="section-label">Bets ${adminMode?"":"(read-only)"}</div>
-    <table>
+    <div class="table-wrap"><table>
       <tr><th>Name</th><th>Bet type</th><th>Score guess</th><th>Stake</th><th>Status</th><th>P/L</th>${adminMode?"<th></th>":""}</tr>
       ${m.bets.map((b,i)=> betRow(m,b,i,result,adminMode)).join("")}
-    </table>
-    <p class="small">Stake = amount wagered, typed in by you. Status and P/L are calculated automatically once you save a result below \u2014 you never type those.</p>
+    </table></div>
+    <p class="small">Stake and score guesses can be edited directly in the table above (admin mode). Status and P/L are calculated automatically once you save a result below \u2014 you never type those.</p>
     ${adminMode ? `<div class="card" style="background:#FAF8F1;margin-top:8px;">
       <p class="small" style="font-weight:600;margin-bottom:6px;">Add bets for one person (tick any combination)</p>
       <div class="field-row">
         <input class="newBetName" data-id="${m.id}" placeholder="Name" style="width:140px;">
       </div>
-      <table>
+      <div class="table-wrap"><table>
         <tr><th></th><th>Bet type</th><th>Stake</th><th>Score guess</th></tr>
         ${multiBetRow(m.id,"90fav","90min: Favorite win")}
         ${multiBetRow(m.id,"90dog","90min: Underdog win")}
@@ -253,7 +262,7 @@ function matchCard(m, adminMode){
         ${multiBetRow(m.id,"etgoal","ET: Exact score", true)}
         ${multiBetRow(m.id,"penfav","Penalties: Favorite wins")}
         ${multiBetRow(m.id,"pendog","Penalties: Underdog wins")}
-      </table>
+      </table></div>
       <button data-addbets="${m.id}" style="margin-top:8px;">Add bets</button>
     </div>` : ""}
 
@@ -307,12 +316,18 @@ function betRow(m,b,i,settled,adminMode){
   const st = settled.bets[i] || {status:"pending", pl:0};
   const badgeClass = st.status==="win"?"win":(st.status==="lose"?"lose":"void");
   const plClass = st.pl>0?"pl-pos":(st.pl<0?"pl-neg":"pl-zero");
-  const scoreGuess = b.type.includes("goal") ? `${b.gs1}-${b.gs2}` : "-";
+  const isGoal = b.type.includes("goal");
+  const scoreCell = adminMode && isGoal
+    ? `<input type="number" class="betGs1" data-id="${m.id}" data-idx="${i}" value="${b.gs1}" style="width:34px;" placeholder="Fav"><input type="number" class="betGs2" data-id="${m.id}" data-idx="${i}" value="${b.gs2}" style="width:34px;" placeholder="Dog">`
+    : (isGoal ? `${b.gs1}-${b.gs2}` : "-");
+  const stakeCell = adminMode
+    ? `<input type="number" class="betStake" data-id="${m.id}" data-idx="${i}" value="${b.stake}" style="width:55px;">`
+    : b.stake;
   return `<tr>
     <td>${esc(b.name)}</td>
     <td>${betLabel(b.type)}</td>
-    <td>${scoreGuess}</td>
-    <td>${b.stake}</td>
+    <td>${scoreCell}</td>
+    <td>${stakeCell}</td>
     <td><span class="badge ${badgeClass}">${st.status}</span></td>
     <td class="${plClass}">${st.pl>0?'+':''}${st.pl.toFixed(2)}</td>
     ${adminMode ? `<td><button class="danger small" data-delbet="${m.id}:${i}">x</button></td>` : ""}
@@ -374,7 +389,7 @@ function adminView(){
       <p>Enter admin PIN</p>
       <input type="password" id="pinInput" inputmode="numeric" maxlength="8"/>
       <button id="pinSubmit">Unlock</button>
-      <p class="small" style="margin-top:14px;">Default PIN unless changed: ${esc(DEFAULT_PIN)}</p>
+      ${state.adminPin === DEFAULT_PIN ? `<p class="small" style="margin-top:14px;color:var(--danger);">You're still using the default PIN \u2014 change it from the Admin panel once unlocked, so others can't guess in.</p>` : ""}
     </div>`;
   }
 
@@ -395,6 +410,13 @@ function adminView(){
     <button class="secondary" id="changePinBtn" style="margin-left:8px;">Change PIN</button>
     <button class="secondary" id="lockOutBtn" style="margin-left:8px;">Lock admin</button>
     <p class="small" style="margin-top:8px;">Auto-add pulls every upcoming fixture from the schedule API and creates a match card for each (favorite is set to the first-listed team by default \u2014 swap it per match if needed). To record a bet, open a match card below and use the Name field under "Bets" \u2014 type the better's name there each time you add their stake.</p>
+  </div>
+  <div class="card">
+    <p class="small" style="font-weight:600;margin-bottom:6px;">Backup (everything lives only in this browser \u2014 export regularly!)</p>
+    <button class="secondary" id="exportBtn">Download backup (.json)</button>
+    <button class="secondary" id="importBtn" style="margin-left:8px;">Restore from backup</button>
+    <input type="file" id="importFile" accept="application/json" style="display:none;">
+    <p class="small" style="margin-top:8px;">This data is saved only on this device/browser \u2014 it is not on a server and won't appear if you (or anyone) open this page elsewhere. Download a backup before clearing your browser, switching devices, or after big updates, so you can restore if anything is lost.</p>
   </div>
   ${sortedMatches().map(m=> matchCard(m, true)).join("")}`;
 }
@@ -501,12 +523,28 @@ function buildPrintTable(m){
     }).join("");
     return `<tr><td>${i+1}</td><td>${esc(name)}</td>${cells}</tr>`;
   }).join("");
+  const settled = settleMatch(m);
+  const plByName = {};
+  m.bets.forEach((b,i)=>{ plByName[b.name] = (plByName[b.name]||0) + settled.bets[i].pl; });
+  const resultKnown = m.result && m.result.s1!=="" && m.result.s2!=="";
+  const totalsRows = names.map(name=>{
+    const pl = plByName[name]||0;
+    const sign = pl>0?"+":"";
+    return `<tr><td>${esc(name)}</td><td style="text-align:right;font-weight:bold;">${sign}${pl.toFixed(2)}</td></tr>`;
+  }).join("");
+  const totalsTable = resultKnown ? `
+  <h3 style="text-align:center;margin-top:18px;">Total Earned / Lost Per Person</h3>
+  <table style="max-width:320px;margin:0 auto;">
+    <tr><th>Name</th><th>Net P/L</th></tr>
+    ${totalsRows}
+  </table>` : `<p style="text-align:center;font-size:12px;margin-top:18px;">(Result not entered yet \u2014 totals will show once result is saved)</p>`;
   return `<h2 style="text-align:center;">${esc(m.fav)} vs ${esc(m.dog)}</h2>
   <p style="text-align:center;font-size:13px;">${esc(m.stage)} &middot; ${esc(m.when)}</p>
   <table>
     <tr><th>S.No.</th><th>Name</th>${cats.map(c=>`<th>${esc(c.label)}</th>`).join("")}</tr>
     ${rows}
-  </table>`;
+  </table>
+  ${totalsTable}`;
 }
 
 function wireEvents(){
@@ -527,6 +565,52 @@ function wireEvents(){
   };
   const lockOut = document.getElementById("lockOutBtn");
   if(lockOut) lockOut.onclick = ()=>{ state.adminUnlocked = false; state.tab="matches"; render(); };
+
+  const exportBtn = document.getElementById("exportBtn");
+  if(exportBtn) exportBtn.onclick = ()=>{
+    const backup = {
+      matches: state.matches,
+      archivedLedger: state.archivedLedger,
+      archivedHouse: state.archivedHouse,
+      adminPin: state.adminPin,
+      exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(backup,null,2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `betting-ledger-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast("Backup downloaded");
+  };
+
+  const importBtn = document.getElementById("importBtn");
+  const importFile = document.getElementById("importFile");
+  if(importBtn && importFile){
+    importBtn.onclick = ()=> importFile.click();
+    importFile.onchange = ()=>{
+      const file = importFile.files[0];
+      if(!file) return;
+      const ok = confirm("Restoring a backup will REPLACE all current matches, ledger, and PIN on this device. Continue?");
+      if(!ok){ importFile.value=""; return; }
+      const reader = new FileReader();
+      reader.onload = async (e)=>{
+        try{
+          const data = JSON.parse(e.target.result);
+          state.matches = Array.isArray(data.matches) ? data.matches : [];
+          state.archivedLedger = data.archivedLedger || {};
+          state.archivedHouse = Number(data.archivedHouse)||0;
+          if(data.adminPin) state.adminPin = data.adminPin;
+          await saveMatches(); await saveArchive(); await savePin();
+          toast("Backup restored");
+          render();
+        }catch(err){ toast("Invalid backup file"); }
+        importFile.value="";
+      };
+      reader.readAsText(file);
+    };
+  }
 
   const addM = document.getElementById("addMatchBtn");
   if(addM) addM.onclick = async ()=>{ state.matches.push(newMatch()); await saveMatches(); render(); };
@@ -553,6 +637,15 @@ function wireEvents(){
   });
 
   document.querySelectorAll(".stageInput").forEach(inp=> inp.onchange=async()=>{ getM(inp.dataset.id).stage=inp.value; await saveMatches(); });
+  document.querySelectorAll(".dtInput").forEach(inp=> inp.onchange=async()=>{
+    const m = getM(inp.dataset.id);
+    m.ts = inp.value ? new Date(inp.value).getTime() : null;
+    if(m.ts){
+      m.when = new Date(m.ts).toLocaleString("en-US", {timeZone:"Asia/Kathmandu", weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) + " NPT";
+    }
+    await saveMatches();
+    render();
+  });
   document.querySelectorAll(".whenInput").forEach(inp=> inp.onchange=async()=>{ getM(inp.dataset.id).when=inp.value; await saveMatches(); });
   document.querySelectorAll(".favInput").forEach(inp=> inp.onchange=async()=>{ getM(inp.dataset.id).fav=inp.value; await saveMatches(); render(); });
   document.querySelectorAll(".dogInput").forEach(inp=> inp.onchange=async()=>{ getM(inp.dataset.id).dog=inp.value; await saveMatches(); render(); });
@@ -601,6 +694,22 @@ function wireEvents(){
     await saveMatches(); render();
   });
 
+  document.querySelectorAll(".betStake").forEach(inp=> inp.onchange=async()=>{
+    const m = getM(inp.dataset.id);
+    m.bets[Number(inp.dataset.idx)].stake = Number(inp.value)||0;
+    await saveMatches(); render();
+  });
+  document.querySelectorAll(".betGs1").forEach(inp=> inp.onchange=async()=>{
+    const m = getM(inp.dataset.id);
+    m.bets[Number(inp.dataset.idx)].gs1 = inp.value;
+    await saveMatches(); render();
+  });
+  document.querySelectorAll(".betGs2").forEach(inp=> inp.onchange=async()=>{
+    const m = getM(inp.dataset.id);
+    m.bets[Number(inp.dataset.idx)].gs2 = inp.value;
+    await saveMatches(); render();
+  });
+
   document.querySelectorAll(".wentET").forEach(cb=> cb.onchange=async()=>{
     const m = getM(cb.dataset.id);
     m.result.wentET = cb.checked;
@@ -612,6 +721,11 @@ function wireEvents(){
   document.querySelectorAll("[data-savesettle]").forEach(btn=> btn.onclick = async ()=>{
     const id = btn.dataset.savesettle;
     const m = getM(id);
+    const hadResult = m.result.s1!=="" && m.result.s2!=="";
+    if(hadResult){
+      const ok = confirm("This match already has a saved result. Saving again will re-settle every bet on it with the new scores \u2014 continue?");
+      if(!ok) return;
+    }
     m.result.s1 = document.querySelector(`.resS1[data-id="${id}"]`).value;
     m.result.s2 = document.querySelector(`.resS2[data-id="${id}"]`).value;
     const etS1El = document.querySelector(`.etS1[data-id="${id}"]`);
