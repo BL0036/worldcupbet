@@ -96,10 +96,9 @@ const DEFAULT_ETMULT = {fav:0.75, dog:2, draw:1, goal:4.5};
 const DEFAULT_PENMULT = {fav:2, dog:2};
 const DEFAULT_PIN = "2026";
 
-const APIFOOTBALL_LEAGUE_ID = 1;
-const APIFOOTBALL_SEASON = 2026;
+const WORLDCUP_JSON_URL = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json";
 
-let state = { matches: [], schedule: [], adminUnlocked:false, adminPin: DEFAULT_PIN, tab: "matches", apiFootballKey: "" };
+let state = { matches: [], schedule: [], adminUnlocked:false, adminPin: DEFAULT_PIN, tab: "matches" };
 
 function toast(msg){
   const t = document.getElementById("toast");
@@ -113,14 +112,11 @@ async function loadAll(){
   catch(e){ state.matches = []; }
   try{ const v = localStorage.getItem("admin_pin"); state.adminPin = v || DEFAULT_PIN; }
   catch(e){ state.adminPin = DEFAULT_PIN; }
-  try{ const v = localStorage.getItem("apifootball_key"); state.apiFootballKey = v || ""; }
-  catch(e){ state.apiFootballKey = ""; }
   document.getElementById("lockBtn").onclick = ()=>{ state.tab = "admin"; render(); };
   render();
 }
 async function saveMatches(){ localStorage.setItem("bet_matches", JSON.stringify(state.matches)); }
 async function savePin(){ localStorage.setItem("admin_pin", state.adminPin); }
-async function saveApiKey(){ localStorage.setItem("apifootball_key", state.apiFootballKey); }
 
 function newMatch(){
   return {
@@ -361,11 +357,6 @@ function adminView(){
     <button class="secondary" id="changePinBtn" style="margin-left:8px;">Change PIN</button>
     <button class="secondary" id="lockOutBtn" style="margin-left:8px;">Lock admin</button>
     <p class="small" style="margin-top:8px;">Auto-add pulls every upcoming fixture from the schedule API and creates a match card for each (favorite is set to the first-listed team by default \u2014 swap it per match if needed). To record a bet, open a match card below and use the Name field under "Bets" \u2014 type the better's name there each time you add their stake.</p>
-    <div style="margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.1);">
-      <label class="small" for="apiKeyInput">API-Football key (free at dashboard.api-football.com \u2014 saved only in this browser, never uploaded to GitHub)</label><br/>
-      <input type="text" id="apiKeyInput" value="${esc(state.apiFootballKey)}" placeholder="Paste your API-Football key" style="width:280px; margin-top:6px;"/>
-      <button class="small" id="saveApiKeyBtn" style="margin-left:6px;">Save key</button>
-    </div>
   </div>
   ${state.matches.map(m=> matchCard(m, true)).join("")}`;
 }
@@ -388,38 +379,41 @@ function scheduleView(){
   </div>`;
 }
 
-async function fetchFixturesFromApiFootball(){
-  if(!state.apiFootballKey){
-    toast("Add your API-Football key in Admin first");
-    return null;
-  }
-  const res = await fetch(`https://v3.football.api-sports.io/fixtures?league=${APIFOOTBALL_LEAGUE_ID}&season=${APIFOOTBALL_SEASON}`, {
-    headers: { "x-apisports-key": state.apiFootballKey }
-  });
+function parseOpenFootballTimestamp(dateStr, timeStr){
+  // dateStr "2026-06-11", timeStr "13:00 UTC-6" (offset hours, sometimes no minutes on offset)
+  const m = /^(\d{1,2}):(\d{2})\s+UTC([+-]\d{1,2})$/.exec(timeStr || "");
+  if(!m) return null;
+  const hh = m[1].padStart(2,"0"), mm = m[2];
+  let offset = parseInt(m[3], 10);
+  const offSign = offset >= 0 ? "+" : "-";
+  const offAbs = String(Math.abs(offset)).padStart(2,"0");
+  return new Date(`${dateStr}T${hh}:${mm}:00${offSign}${offAbs}:00`);
+}
+
+async function fetchFixturesFromOpenFootball(){
+  const res = await fetch(WORLDCUP_JSON_URL);
   if(!res.ok) throw new Error("Bad response");
   const data = await res.json();
-  return (data && data.response) ? data.response : [];
+  const matches = (data && data.matches) ? data.matches : [];
+  return matches.map(mm=>{
+    const ts = parseOpenFootballTimestamp(mm.date, mm.time);
+    return { team1: mm.team1, team2: mm.team2, round: mm.round, ground: mm.ground, timestamp: ts };
+  }).filter(f=> f.timestamp);
 }
 
 async function syncSchedule(){
   toast("Fetching schedule...");
   try{
-    const fixtures = await fetchFixturesFromApiFootball();
-    if(fixtures===null){ render(); return; }
+    const fixtures = await fetchFixturesFromOpenFootball();
     const now = new Date();
-    const upcoming = fixtures.filter(f=>{
-      const ts = f.fixture && f.fixture.date;
-      if(!ts) return false;
-      return new Date(ts) >= now;
-    }).slice(0,30);
+    const upcoming = fixtures.filter(f=> f.timestamp >= now).slice(0,30);
     state.schedule = upcoming.map(f=>{
-      const t = new Date(f.fixture.date);
-      const whenNPT = t.toLocaleString("en-US", {timeZone:"Asia/Kathmandu", weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) + " NPT";
-      return { team1: f.teams.home.name, team2: f.teams.away.name, whenNPT };
+      const whenNPT = f.timestamp.toLocaleString("en-US", {timeZone:"Asia/Kathmandu", weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) + " NPT";
+      return { team1: f.team1, team2: f.team2, whenNPT };
     });
     toast(state.schedule.length ? "Schedule synced" : "No upcoming fixtures found");
   }catch(err){
-    toast("Could not reach schedule API \u2014 add matches manually instead");
+    toast("Could not reach schedule data \u2014 add matches manually instead");
   }
   render();
 }
@@ -427,21 +421,18 @@ async function syncSchedule(){
 async function syncAllFixturesAsMatches(){
   toast("Fetching all remaining fixtures...");
   try{
-    const fixtures = await fetchFixturesFromApiFootball();
-    if(fixtures===null){ render(); return; }
+    const fixtures = await fetchFixturesFromOpenFootball();
     const now = new Date();
-    const upcoming = fixtures.filter(f=> f.fixture && f.fixture.date && new Date(f.fixture.date) >= now);
+    const upcoming = fixtures.filter(f=> f.timestamp >= now);
     const existingPairs = new Set(state.matches.map(m=> m.fav+"|"+m.dog));
     let added = 0;
     upcoming.forEach(f=>{
-      const t = new Date(f.fixture.date);
-      const whenNPT = t.toLocaleString("en-US", {timeZone:"Asia/Kathmandu", weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) + " NPT";
-      const homeTeam = f.teams.home.name, awayTeam = f.teams.away.name;
-      const pairKey = homeTeam+"|"+awayTeam;
+      const whenNPT = f.timestamp.toLocaleString("en-US", {timeZone:"Asia/Kathmandu", weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) + " NPT";
+      const pairKey = f.team1+"|"+f.team2;
       if(existingPairs.has(pairKey)) return;
       const m = newMatch();
-      m.fav = homeTeam; m.dog = awayTeam; m.when = whenNPT;
-      m.stage = (f.league && f.league.round) ? f.league.round : "Knockout stage";
+      m.fav = f.team1; m.dog = f.team2; m.when = whenNPT;
+      m.stage = f.round || "Knockout stage";
       state.matches.push(m);
       existingPairs.add(pairKey);
       added++;
@@ -449,7 +440,7 @@ async function syncAllFixturesAsMatches(){
     await saveMatches();
     toast(added ? `Added ${added} matches` : "No new fixtures to add \u2014 try again later or add manually");
   }catch(err){
-    toast("Could not reach schedule API \u2014 add matches manually instead");
+    toast("Could not reach schedule data \u2014 add matches manually instead");
   }
   render();
 }
@@ -497,14 +488,6 @@ function wireEvents(){
   };
   const lockOut = document.getElementById("lockOutBtn");
   if(lockOut) lockOut.onclick = ()=>{ state.adminUnlocked = false; state.tab="matches"; render(); };
-
-  const saveKeyBtn = document.getElementById("saveApiKeyBtn");
-  if(saveKeyBtn) saveKeyBtn.onclick = async ()=>{
-    const input = document.getElementById("apiKeyInput");
-    state.apiFootballKey = input.value.trim();
-    await saveApiKey();
-    toast(state.apiFootballKey ? "API key saved" : "API key cleared");
-  };
 
   const addM = document.getElementById("addMatchBtn");
   if(addM) addM.onclick = async ()=>{ state.matches.push(newMatch()); await saveMatches(); render(); };
