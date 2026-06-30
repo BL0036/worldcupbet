@@ -113,7 +113,7 @@ const DEFAULT_PIN = "2026";
 
 const WORLDCUP_JSON_URL = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json";
 
-let state = { matches: [], schedule: [], adminUnlocked:false, adminPin: DEFAULT_PIN, tab: "matches" };
+let state = { matches: [], schedule: [], adminUnlocked:false, adminPin: DEFAULT_PIN, tab: "matches", archivedLedger: {}, archivedHouse: 0 };
 
 function toast(msg){
   const t = document.getElementById("toast");
@@ -127,20 +127,39 @@ async function loadAll(){
   catch(e){ state.matches = []; }
   try{ const v = localStorage.getItem("admin_pin"); state.adminPin = v || DEFAULT_PIN; }
   catch(e){ state.adminPin = DEFAULT_PIN; }
+  try{ const v = localStorage.getItem("archived_ledger"); state.archivedLedger = v ? JSON.parse(v) : {}; }
+  catch(e){ state.archivedLedger = {}; }
+  try{ const v = localStorage.getItem("archived_house"); state.archivedHouse = v ? Number(v) : 0; }
+  catch(e){ state.archivedHouse = 0; }
   document.getElementById("lockBtn").onclick = ()=>{ state.tab = "admin"; render(); };
   render();
 }
 async function saveMatches(){ localStorage.setItem("bet_matches", JSON.stringify(state.matches)); }
 async function savePin(){ localStorage.setItem("admin_pin", state.adminPin); }
+async function saveArchive(){
+  localStorage.setItem("archived_ledger", JSON.stringify(state.archivedLedger));
+  localStorage.setItem("archived_house", String(state.archivedHouse));
+}
 
 function newMatch(){
   return {
     id: "m-"+Date.now(),
+    ts: null,
     stage:"", when:"", fav:"", dog:"",
     mult: {...DEFAULT_MULT}, etMult: {...DEFAULT_ETMULT}, penMult: {...DEFAULT_PENMULT},
     bets: [],
     result: { s1:"", s2:"", wentET:false, et_s1:"", et_s2:"", wentPen:false, penWinner:"" }
   };
+}
+
+function sortedMatches(){
+  return [...state.matches].sort((a,b)=>{
+    const at = (typeof a.ts === "number") ? a.ts : Infinity;
+    const bt = (typeof b.ts === "number") ? b.ts : Infinity;
+    if(at !== bt) return at - bt;
+    // fall back to id (creation order) when neither/both lack a date
+    return (a.id||"").localeCompare(b.id||"");
+  });
 }
 
 function render(){
@@ -163,7 +182,7 @@ function render(){
 
 function matchesView(){
   if(!state.matches.length) return `<div class="card"><p class="small">No matches yet. Go to the Admin tab (PIN required) to add one, or sync fixtures from the Schedule tab.</p></div>`;
-  return state.matches.map(m=> matchCard(m, false)).join("");
+  return sortedMatches().map(m=> matchCard(m, false)).join("");
 }
 
 function matchCard(m, adminMode){
@@ -329,7 +348,7 @@ function settleMatch(m){
 }
 
 function ledgerView(){
-  const totals = {};
+  const totals = {...state.archivedLedger};
   state.matches.forEach(m=>{
     const settled = settleMatch(m);
     m.bets.forEach((b,i)=>{
@@ -359,7 +378,7 @@ function adminView(){
     </div>`;
   }
 
-  const totalHouse = state.matches.reduce((sum,m)=>{
+  const totalHouse = state.archivedHouse + state.matches.reduce((sum,m)=>{
     const settled = settleMatch(m);
     const matchPL = settled.bets.reduce((s,b)=> s + (b.status==="pending"||b.status==="void" ? 0 : -b.pl), 0);
     return sum + matchPL;
@@ -377,7 +396,7 @@ function adminView(){
     <button class="secondary" id="lockOutBtn" style="margin-left:8px;">Lock admin</button>
     <p class="small" style="margin-top:8px;">Auto-add pulls every upcoming fixture from the schedule API and creates a match card for each (favorite is set to the first-listed team by default \u2014 swap it per match if needed). To record a bet, open a match card below and use the Name field under "Bets" \u2014 type the better's name there each time you add their stake.</p>
   </div>
-  ${state.matches.map(m=> matchCard(m, true)).join("")}`;
+  ${sortedMatches().map(m=> matchCard(m, true)).join("")}`;
 }
 
 function scheduleView(){
@@ -392,7 +411,7 @@ function scheduleView(){
           <div>${esc(f.team1)} vs ${esc(f.team2)}</div>
           <div class="fixture-time">${esc(f.whenNPT)}</div>
         </div>
-        ${state.adminUnlocked ? `<button class="small" data-usefixture="${f.team1}|||${f.team2}|||${f.whenNPT}">Use</button>` : ""}
+        ${state.adminUnlocked ? `<button class="small" data-usefixture="${f.team1}|||${f.team2}|||${f.whenNPT}|||${f.ts||""}">Use</button>` : ""}
       </div>
     `).join("") : `<p class="small">No fixtures synced yet.</p>`}
   </div>`;
@@ -428,7 +447,7 @@ async function syncSchedule(){
     const upcoming = fixtures.filter(f=> f.timestamp >= now).slice(0,30);
     state.schedule = upcoming.map(f=>{
       const whenNPT = f.timestamp.toLocaleString("en-US", {timeZone:"Asia/Kathmandu", weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"}) + " NPT";
-      return { team1: f.team1, team2: f.team2, whenNPT };
+      return { team1: f.team1, team2: f.team2, whenNPT, ts: f.timestamp.getTime() };
     });
     toast(state.schedule.length ? "Schedule synced" : "No upcoming fixtures found");
   }catch(err){
@@ -451,6 +470,7 @@ async function syncAllFixturesAsMatches(){
       if(existingPairs.has(pairKey)) return;
       const m = newMatch();
       m.fav = f.team1; m.dog = f.team2; m.when = whenNPT;
+      m.ts = f.timestamp.getTime();
       m.stage = f.round || "Knockout stage";
       state.matches.push(m);
       existingPairs.add(pairKey);
@@ -512,8 +532,24 @@ function wireEvents(){
   if(addM) addM.onclick = async ()=>{ state.matches.push(newMatch()); await saveMatches(); render(); };
 
   document.querySelectorAll("[data-delmatch]").forEach(btn=> btn.onclick = async ()=>{
-    state.matches = state.matches.filter(m=>m.id!==btn.dataset.delmatch);
-    await saveMatches(); render();
+    const id = btn.dataset.delmatch;
+    const m = getM(id);
+    if(!m) return;
+    const label = `${m.fav||"Favorite"} vs ${m.dog||"Underdog"}`;
+    const ok = confirm(`Completely delete "${label}"?\n\nThis removes the match card for good. Each bettor's win/loss for this match will stay recorded in the Ledger and House total, but you won't be able to bet on this match again.`);
+    if(!ok) return;
+    const settled = settleMatch(m);
+    m.bets.forEach((b,i)=>{
+      const st = settled.bets[i];
+      if(st.status==="pending") return; // unsettled bets aren't archived
+      state.archivedLedger[b.name] = (state.archivedLedger[b.name]||0) + st.pl;
+      if(st.status!=="void") state.archivedHouse += -st.pl;
+    });
+    await saveArchive();
+    state.matches = state.matches.filter(x=>x.id!==id);
+    await saveMatches();
+    toast("Match deleted \u2014 ledger totals kept");
+    render();
   });
 
   document.querySelectorAll(".stageInput").forEach(inp=> inp.onchange=async()=>{ getM(inp.dataset.id).stage=inp.value; await saveMatches(); });
@@ -565,8 +601,13 @@ function wireEvents(){
     await saveMatches(); render();
   });
 
-  document.querySelectorAll(".wentET").forEach(cb=> cb.onchange=()=>{ getM(cb.dataset.id).result.wentET = cb.checked; render(); });
-  document.querySelectorAll(".wentPen").forEach(cb=> cb.onchange=()=>{ getM(cb.dataset.id).result.wentPen = cb.checked; render(); });
+  document.querySelectorAll(".wentET").forEach(cb=> cb.onchange=async()=>{
+    const m = getM(cb.dataset.id);
+    m.result.wentET = cb.checked;
+    if(!cb.checked) m.result.wentPen = false; // can't have pens without ET
+    await saveMatches(); render();
+  });
+  document.querySelectorAll(".wentPen").forEach(cb=> cb.onchange=async()=>{ getM(cb.dataset.id).result.wentPen = cb.checked; await saveMatches(); render(); });
 
   document.querySelectorAll("[data-savesettle]").forEach(btn=> btn.onclick = async ()=>{
     const id = btn.dataset.savesettle;
@@ -596,9 +637,10 @@ function wireEvents(){
   if(syncAllBtn) syncAllBtn.onclick = syncAllFixturesAsMatches;
 
   document.querySelectorAll("[data-usefixture]").forEach(btn=> btn.onclick = async ()=>{
-    const [t1,t2,when] = btn.dataset.usefixture.split("|||");
+    const [t1,t2,when,tsStr] = btn.dataset.usefixture.split("|||");
     const m = newMatch();
     m.fav = t1; m.dog = t2; m.when = when; m.stage = "Synced fixture";
+    if(tsStr) m.ts = Number(tsStr);
     state.matches.push(m);
     await saveMatches();
     state.tab = "admin";
