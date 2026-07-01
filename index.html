@@ -70,6 +70,7 @@
   .badge.win{background:#E2F0E6;color:var(--win);}
   .badge.lose{background:#FAE6E2;color:var(--lose);}
   .badge.void{background:#EFEDE6;color:var(--void);}
+  .badge.pending{background:#EEF3FF;color:#4A6FA5;}
   .small{font-size:11.5px;color:var(--muted);}
   .checks{display:flex;gap:14px;align-items:center;font-size:13px;margin-bottom:8px;flex-wrap:wrap;}
   .checks label{display:flex;align-items:center;gap:5px;}
@@ -245,6 +246,29 @@ function matchCard(m, adminMode){
       ${m.bets.map((b,i)=> betRow(m,b,i,result,adminMode)).join("")}
     </table></div>
     <p class="small">Stake and score guesses can be edited directly in the table above (admin mode). Status and P/L are calculated automatically once you save a result below \u2014 you never type those.</p>
+
+    ${(()=>{
+      // Build per-person net summary for this match
+      const netByName = {};
+      m.bets.forEach((b,i)=>{
+        const st = result.bets[i];
+        if(st.status==="pending") return;
+        netByName[b.name] = (netByName[b.name]||0) + st.pl;
+      });
+      const entries = Object.entries(netByName);
+      if(!entries.length) return "";
+      const rows = entries.map(([name,pl])=>`
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line);font-size:13px;">
+          <span style="font-weight:600;">${esc(name)}</span>
+          <span class="${pl>0?'pl-pos':(pl<0?'pl-neg':'pl-zero')}" style="font-weight:700;">${pl>0?'+':''}${pl.toFixed(2)}</span>
+        </div>`).join("");
+      return `<div style="background:#F1EEE2;border-radius:8px;padding:10px 12px;margin:8px 0;">
+        <div style="font-size:11px;font-weight:700;color:var(--pitch);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:4px;">Net per person (this match)</div>
+        ${rows}
+        <div style="font-size:10.5px;color:var(--muted);margin-top:6px;">Positive = they win money from house &nbsp;|&nbsp; Negative = they owe house &nbsp;|&nbsp; Pending bets excluded</div>
+      </div>`;
+    })()}
+
     ${adminMode ? `<div class="card" style="background:#FAF8F1;margin-top:8px;">
       <p class="small" style="font-weight:600;margin-bottom:6px;">Add bets for one person (tick any combination)</p>
       <div class="field-row">
@@ -267,6 +291,7 @@ function matchCard(m, adminMode){
     </div>` : ""}
 
     ${adminMode ? `<hr><div class="section-label">Result</div>
+    <p class="small" style="margin-bottom:8px;background:#FFF8E1;border-left:3px solid var(--gold);padding:6px 10px;border-radius:0 6px 6px 0;">Always enter the <strong>90-min score first</strong> (even if it was 0-0). If the game went to ET, tick the box and enter the ET score (the cumulative full-time score, or just ET-period goals — be consistent). If pens followed, tick that box and pick the winner. The app settles all bets automatically once you hit Save.</p>
     <div class="field-row">
       <span class="small" style="align-self:center;">Regulation (90 min):</span>
       <input class="resS1" data-id="${m.id}" type="number" placeholder="${esc(m.fav)||'Fav'} goals" value="${m.result.s1}" style="width:70px;">
@@ -287,7 +312,7 @@ function matchCard(m, adminMode){
         <option value="dog" ${m.result.penWinner==='dog'?'selected':''}>${esc(m.dog)||'Underdog'}</option>
       </select>
     </div>
-    <button data-savesettle="${m.id}" style="margin-top:6px;">Save result & settle</button>` : ""}
+    <button data-savesettle="${m.id}" style="margin-top:6px;">Save result & settle bets</button>` : ""}
 
     <div class="field-row" style="margin-top:10px;">
       <button class="secondary" data-print="${m.id}">Print bet sheet</button>
@@ -314,7 +339,7 @@ function betLabel(type){
 
 function betRow(m,b,i,settled,adminMode){
   const st = settled.bets[i] || {status:"pending", pl:0};
-  const badgeClass = st.status==="win"?"win":(st.status==="lose"?"lose":"void");
+  const badgeClass = st.status==="win"?"win":(st.status==="lose"?"lose":(st.status==="void"?"void":"pending"));
   const plClass = st.pl>0?"pl-pos":(st.pl<0?"pl-neg":"pl-zero");
   const isGoal = b.type.includes("goal");
   const scoreCell = adminMode && isGoal
@@ -363,24 +388,53 @@ function settleMatch(m){
 }
 
 function ledgerView(){
-  const totals = {...state.archivedLedger};
+  // Build totals: wins earned, losses paid, net per person
+  const winMap = {...(()=>{ const m={}; Object.keys(state.archivedLedger).forEach(k=>{ if(state.archivedLedger[k]>0) m[k]=(m[k]||0)+state.archivedLedger[k]; }); return m; })()};
+  const lossMap = {};
+  const netMap = {...state.archivedLedger};
+
   state.matches.forEach(m=>{
     const settled = settleMatch(m);
     m.bets.forEach((b,i)=>{
       const st = settled.bets[i];
       if(st.status==="pending") return;
-      totals[b.name] = (totals[b.name]||0) + st.pl;
+      netMap[b.name] = (netMap[b.name]||0) + st.pl;
+      if(st.pl > 0) winMap[b.name] = (winMap[b.name]||0) + st.pl;
+      if(st.pl < 0) lossMap[b.name] = (lossMap[b.name]||0) + Math.abs(st.pl);
     });
   });
-  const sorted = Object.entries(totals).sort((a,b)=>b[1]-a[1]);
-  if(!sorted.length) return `<div class="card"><p class="small">No settled bets yet.</p></div>`;
-  return `<div class="card">
-    ${sorted.map(([name,pl])=>`<div class="lb-row">
-      <span class="lb-name">${esc(name)}</span>
-      <span class="${pl>0?'pl-pos':(pl<0?'pl-neg':'pl-zero')}">${pl>0?'+':''}${pl.toFixed(2)}</span>
-    </div>`).join("")}
+
+  const names = [...new Set([...Object.keys(netMap)])];
+  if(!names.length) return `<div class="card"><p class="small">No settled bets yet. Save a match result from Admin to see totals here.</p></div>`;
+
+  const sorted = names.sort((a,b)=> (netMap[b]||0)-(netMap[a]||0));
+
+  const rows = sorted.map(name=>{
+    const net = netMap[name]||0;
+    const won = winMap[name]||0;
+    const lost = lossMap[name]||0;
+    const netClass = net>0?"pl-pos":(net<0?"pl-neg":"pl-zero");
+    return `<div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;box-shadow:var(--shadow);">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-weight:700;font-size:15px;">${esc(name)}</span>
+        <span class="${netClass}" style="font-size:18px;font-weight:800;">${net>0?'+':''}${net.toFixed(2)}</span>
+      </div>
+      <div style="display:flex;gap:16px;margin-top:6px;font-size:12px;">
+        <span style="color:var(--win);">&#9650; Won: +${won.toFixed(2)}</span>
+        <span style="color:var(--lose);">&#9660; Lost: -${lost.toFixed(2)}</span>
+        <span style="color:var(--muted);">Net = Won - Lost</span>
+      </div>
+    </div>`;
+  }).join("");
+
+  const grandNet = sorted.reduce((s,n)=>s+(netMap[n]||0),0);
+  return `<div class="card" style="text-align:center;padding:10px;">
+    <div class="small" style="font-weight:600;">Grand total in play (all settled bets)</div>
+    <div style="font-size:22px;font-weight:800;color:var(--pitch);margin-top:2px;">${grandNet>=0?'+':''}${grandNet.toFixed(2)}</div>
+    <div class="small">Positive = house owes, Negative = players owe house</div>
   </div>
-  <p class="small" style="text-align:center;">Positive = net winnings, negative = net owed. Voided bets don't count.</p>`;
+  ${rows}
+  <p class="small" style="text-align:center;">Net = total won \u2212 total lost across all matches &nbsp;|&nbsp; Pending & void bets excluded</p>`;
 }
 
 function adminView(){
@@ -507,41 +561,76 @@ async function syncAllFixturesAsMatches(){
 }
 
 function buildPrintTable(m){
-  const cats = [
-    {key:"90fav", label:`90min ${m.fav||"Fav"}`}, {key:"90dog", label:`90min ${m.dog||"Dog"}`}, {key:"90draw", label:"90min Draw"}, {key:"90goal", label:"90min Exact score"},
-    {key:"etfav", label:`ET ${m.fav||"Fav"}`}, {key:"etdog", label:`ET ${m.dog||"Dog"}`}, {key:"etdraw", label:"ET Draw"}, {key:"etgoal", label:"ET Exact score"},
-    {key:"penfav", label:`Pens ${m.fav||"Fav"}`}, {key:"pendog", label:`Pens ${m.dog||"Dog"}`}
+  const allCats = [
+    {key:"90fav",  label:`90min: ${m.fav||"Fav"} wins`},
+    {key:"90dog",  label:`90min: ${m.dog||"Dog"} wins`},
+    {key:"90draw", label:"90min: Draw"},
+    {key:"90goal", label:"90min: Exact score"},
+    {key:"etfav",  label:`ET: ${m.fav||"Fav"} wins`},
+    {key:"etdog",  label:`ET: ${m.dog||"Dog"} wins`},
+    {key:"etdraw", label:"ET: Draw"},
+    {key:"etgoal", label:"ET: Exact score"},
+    {key:"penfav", label:`Pens: ${m.fav||"Fav"}`},
+    {key:"pendog", label:`Pens: ${m.dog||"Dog"}`}
   ];
+  // Only show columns that have at least one bet
+  const usedKeys = new Set(m.bets.map(b=>b.type));
+  const cats = allCats.filter(c=> usedKeys.has(c.key));
+
   const names = [...new Set(m.bets.map(b=>b.name))];
-  let rows = names.map((name,i)=>{
-    const cells = cats.map(c=>{
-      const match = m.bets.filter(b=>b.name===name && b.type===c.key);
-      if(!match.length) return "<td></td>";
-      const total = match.reduce((s,b)=>s+Number(b.stake||0),0);
-      const scores = match.filter(b=>b.gs1!=="").map(b=>`${b.gs1}-${b.gs2}`).join(",");
-      return `<td>${total}${scores?` (${esc(scores)})`:""}</td>`;
-    }).join("");
-    return `<tr><td>${i+1}</td><td>${esc(name)}</td>${cells}</tr>`;
-  }).join("");
   const settled = settleMatch(m);
-  const plByName = {};
-  m.bets.forEach((b,i)=>{ plByName[b.name] = (plByName[b.name]||0) + settled.bets[i].pl; });
-  const resultKnown = m.result && m.result.s1!=="" && m.result.s2!=="";
-  const totalsRows = names.map(name=>{
-    const pl = plByName[name]||0;
-    const sign = pl>0?"+":"";
-    return `<tr><td>${esc(name)}</td><td style="text-align:right;font-weight:bold;">${sign}${pl.toFixed(2)}</td></tr>`;
+
+  const rows = names.map((name,i)=>{
+    const cells = cats.map(c=>{
+      const bets = m.bets.filter(b=>b.name===name && b.type===c.key);
+      if(!bets.length) return "<td>-</td>";
+      const total = bets.reduce((s,b)=>s+Number(b.stake||0),0);
+      const scores = bets.filter(b=>b.gs1!=="").map(b=>`${b.gs1}-${b.gs2}`).join(",");
+      return `<td>${total}${scores?`<br><small>(${esc(scores)})</small>`:""}</td>`;
+    }).join("");
+    return `<tr><td>${i+1}</td><td style="font-weight:600;">${esc(name)}</td>${cells}</tr>`;
   }).join("");
-  const totalsTable = resultKnown ? `
-  <h3 style="text-align:center;margin-top:18px;">Total Earned / Lost Per Person</h3>
-  <table style="max-width:320px;margin:0 auto;">
-    <tr><th>Name</th><th>Net P/L</th></tr>
-    ${totalsRows}
-  </table>` : `<p style="text-align:center;font-size:12px;margin-top:18px;">(Result not entered yet \u2014 totals will show once result is saved)</p>`;
-  return `<h2 style="text-align:center;">${esc(m.fav)} vs ${esc(m.dog)}</h2>
-  <p style="text-align:center;font-size:13px;">${esc(m.stage)} &middot; ${esc(m.when)}</p>
+
+  // Net totals per person
+  const netMap = {}, wonMap = {}, lostMap = {};
+  m.bets.forEach((b,idx)=>{
+    const st = settled.bets[idx];
+    if(st.status==="pending") return;
+    netMap[b.name] = (netMap[b.name]||0) + st.pl;
+    if(st.pl>0) wonMap[b.name] = (wonMap[b.name]||0) + st.pl;
+    if(st.pl<0) lostMap[b.name] = (lostMap[b.name]||0) + Math.abs(st.pl);
+  });
+
+  const hasReg = m.result && m.result.s1!=="" && m.result.s2!=="";
+  const anySettled = names.some(n=> n in netMap);
+
+  const totalsTable = anySettled ? `
+  <h3 style="text-align:center;margin-top:20px;font-size:14px;">Settlement Summary</h3>
+  <table style="max-width:420px;margin:0 auto;font-size:12px;">
+    <tr><th>Name</th><th>Won (+)</th><th>Lost (−)</th><th>Net</th></tr>
+    ${names.map(name=>{
+      const net = netMap[name]||0, won = wonMap[name]||0, lost = lostMap[name]||0;
+      const color = net>0?"color:#2E7D4F":net<0?"color:#B5402D":"";
+      return `<tr>
+        <td style="font-weight:600;">${esc(name)}</td>
+        <td style="color:#2E7D4F;">+${won.toFixed(2)}</td>
+        <td style="color:#B5402D;">−${lost.toFixed(2)}</td>
+        <td style="font-weight:800;${color}">${net>0?"+":""}${net.toFixed(2)}</td>
+      </tr>`;
+    }).join("")}
+  </table>
+  ${!hasReg ? `<p style="text-align:center;font-size:11px;color:#888;margin-top:6px;">⚠ 90-min score not entered — 90min bets still pending and excluded above</p>` : ""}` 
+  : `<p style="text-align:center;font-size:12px;margin-top:18px;color:#888;">No settled bets yet — save the result in Admin to see totals.</p>`;
+
+  const resultLine = hasReg
+    ? `Result: ${esc(m.fav)} ${m.result.s1} – ${m.result.s2} ${esc(m.dog)}${m.result.wentET?` (ET: ${m.result.et_s1}–${m.result.et_s2})`:""}${m.result.wentPen?` · Pens: ${m.result.penWinner==="fav"?m.fav:m.dog} win`:""}`
+    : "Result: not yet entered";
+
+  return `<h2 style="text-align:center;font-size:16px;margin-bottom:2px;">${esc(m.fav||"Favorite")} vs ${esc(m.dog||"Underdog")}</h2>
+  <p style="text-align:center;font-size:12px;margin:2px 0;">${esc(m.stage)} &middot; ${esc(m.when)}</p>
+  <p style="text-align:center;font-size:12px;font-weight:600;margin:4px 0 12px;">${resultLine}</p>
   <table>
-    <tr><th>S.No.</th><th>Name</th>${cats.map(c=>`<th>${esc(c.label)}</th>`).join("")}</tr>
+    <tr><th>#</th><th>Name</th>${cats.map(c=>`<th style="font-size:10px;">${esc(c.label)}</th>`).join("")}</tr>
     ${rows}
   </table>
   ${totalsTable}`;
@@ -726,16 +815,36 @@ function wireEvents(){
       const ok = confirm("This match already has a saved result. Saving again will re-settle every bet on it with the new scores \u2014 continue?");
       if(!ok) return;
     }
-    m.result.s1 = document.querySelector(`.resS1[data-id="${id}"]`).value;
-    m.result.s2 = document.querySelector(`.resS2[data-id="${id}"]`).value;
-    const etS1El = document.querySelector(`.etS1[data-id="${id}"]`);
-    const etS2El = document.querySelector(`.etS2[data-id="${id}"]`);
-    if(etS1El){ m.result.et_s1 = etS1El.value; m.result.et_s2 = etS2El.value; }
-    const penWinEl = document.querySelector(`.penWinner[data-id="${id}"]`);
-    if(penWinEl){ m.result.penWinner = penWinEl.value; }
+    const s1val = document.querySelector(`.resS1[data-id="${id}"]`).value.trim();
+    const s2val = document.querySelector(`.resS2[data-id="${id}"]`).value.trim();
+    if(s1val==="" || s2val===""){
+      toast("⚠️ Enter the 90-min score first (use 0-0 if it was goalless at 90 min)");
+      return;
+    }
+    const etChecked = document.querySelector(`.wentET[data-id="${id}"]`).checked;
+    const et1val = document.querySelector(`.etS1[data-id="${id}"]`).value.trim();
+    const et2val = document.querySelector(`.etS2[data-id="${id}"]`).value.trim();
+    if(etChecked && (et1val==="" || et2val==="")){
+      toast("⚠️ Enter the extra time score (use 0-0 if no goals were scored in ET)");
+      return;
+    }
+    const penChecked = document.querySelector(`.wentPen[data-id="${id}"]`).checked;
+    const penWinVal = document.querySelector(`.penWinner[data-id="${id}"]`).value;
+    if(penChecked && !penWinVal){
+      toast("⚠️ Select the penalty shootout winner");
+      return;
+    }
+    m.result.s1 = s1val;
+    m.result.s2 = s2val;
+    m.result.wentET = etChecked;
+    m.result.et_s1 = etChecked ? et1val : "";
+    m.result.et_s2 = etChecked ? et2val : "";
+    m.result.wentPen = penChecked;
+    m.result.penWinner = penChecked ? penWinVal : "";
     await saveMatches();
+    state.tab = "ledger";
     render();
-    toast("Result saved and bets settled");
+    toast("Result saved \u2014 check net totals below");
   });
 
   document.querySelectorAll("[data-print]").forEach(btn=> btn.onclick = ()=>{
